@@ -1,0 +1,7 @@
+(library
+ (name aes)
+ (libraries codec)
+ (modules encrypt)
+ (inline_tests)
+ (preprocess
+  (pps ppx_inline_test)))
