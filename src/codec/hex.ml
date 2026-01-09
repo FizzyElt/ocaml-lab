@@ -1,3 +1,9 @@
+module type M = sig
+  val to_bytes : string -> bytes
+  val of_bytes : bytes -> string
+end
+
+module Hex : M = struct
   let hex_value (c : char) : int =
       match c with
       | '0' .. '9' -> Char.code c - Char.code '0'
@@ -6,7 +12,7 @@
       | _ -> invalid_arg "hex_value"
   ;;
 
-  let bytes_of_hex (s : string) : bytes =
+  let to_bytes (s : string) : bytes =
       let len = String.length s in
       if len mod 2 <> 0 then invalid_arg "bytes_of_hex: odd length";
       let out = Bytes.create (len / 2) in
@@ -18,7 +24,7 @@
       out
   ;;
 
-  let hex_of_bytes (b : bytes) : string =
+  let of_bytes (b : bytes) : string =
       let hex = "0123456789abcdef" in
       let out = Bytes.create (Bytes.length b * 2) in
       for i = 0 to Bytes.length b - 1 do
@@ -28,3 +34,6 @@
       done;
       Bytes.to_string out
   ;;
+end
+
+include Hex
