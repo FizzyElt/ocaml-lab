@@ -1,7 +1,6 @@
 (library
  (name aes)
  (libraries codec)
- (modules encrypt decrypt core table key_schedule cbc variant)
  (inline_tests
   (flags (-verbose)))
  (preprocess
