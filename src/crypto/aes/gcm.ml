@@ -57,16 +57,16 @@ let gf_mul (x : bytes) (y : bytes) : bytes =
     for i = 0 to 127 do
       if get_bit x i = 1 then (
         let tmp = xor_bytes z !v in
-        Bytes.blit tmp 0 z 0 16;
+        Bytes.blit tmp 0 z 0 16
+      );
 
-        let lsb = Bytes.get_uint8 !v 15 land 1 in
-        let shifted = shift_right_one !v in
+      let lsb = Bytes.get_uint8 !v 15 land 1 in
+      let shifted = shift_right_one !v in
 
-        if lsb = 1 then
-          Bytes.set_uint8 shifted 0 (Bytes.get_uint8 shifted 0 lxor r);
+      if lsb = 1 then
+        Bytes.set_uint8 shifted 0 (Bytes.get_uint8 shifted 0 lxor r);
 
-        v := shifted
-      )
+      v := shifted
     done;
     z
 ;;
@@ -151,7 +151,7 @@ let encrypt
       ~(iv : bytes)
       ~(aad : bytes)
       (pt : bytes)
-  : ct:bytes * tag:bytes
+  : bytes * bytes
   =
     let keys = key_expansion ~variant key in
     let h = encrypt_block_with_keys ~variant (Bytes.create 16) keys in
@@ -163,5 +163,63 @@ let encrypt
     let e_j0 = encrypt_block_with_keys ~variant j0 keys in
     let tag = xor_bytes e_j0 s in
 
-    (~ct, ~tag)
+    (ct, tag)
+;;
+let x : float iarray = [| 0.; 1.; 2. |]
+
+(* 
+================== 
+=                = 
+=   test block   = 
+=                = 
+================== 
+*)
+open Codec
+
+let%test "gcm aes128 empty pt/aad" =
+    let key = Hex.to_bytes "00000000000000000000000000000000" in
+    let iv = Hex.to_bytes "000000000000000000000000" in
+    let pt = Hex.to_bytes "" in
+    let aad = Hex.to_bytes "" in
+
+    let (ct, tag) = encrypt ~variant:Aes_128 ~key ~iv ~aad pt in
+
+    let exp_ct = Hex.to_bytes "" in
+    let exp_tag = Hex.to_bytes "58e2fccefa7e3061367f1d57a4e7455a" in
+
+    exp_ct = ct && exp_tag = tag
+;;
+
+let%test "gcm aes128 single block pt" =
+    let key = Hex.to_bytes "00000000000000000000000000000000" in
+    let iv = Hex.to_bytes "000000000000000000000000" in
+    let pt = Hex.to_bytes "00000000000000000000000000000000" in
+    let aad = Hex.to_bytes "" in
+
+    let (ct, tag) = encrypt ~variant:Aes_128 ~key ~iv ~aad pt in
+
+    let exp_ct = Hex.to_bytes "0388dace60b6a392f328c2b971b2fe78" in
+    let exp_tag = Hex.to_bytes "ab6e47d42cec13bdf53a67b21257bddf" in
+
+    exp_ct = ct && exp_tag = tag
+;;
+
+let%test "gcm aes128 with aad and multi-block pt" =
+    let key = Hex.to_bytes "feffe9928665731c6d6a8f9467308308" in
+    let iv = Hex.to_bytes "cafebabefacedbaddecaf888" in
+    let pt =
+        Hex.to_bytes
+          "d9313225f88406e5a55909c5aff5269a86a7a9531534f7da2e4c303d8a318a721c3c0c95956809532fcf0e2449a6b525b16aedf5aa0de657ba637b39"
+    in
+    let aad = Hex.to_bytes "feedfacedeadbeeffeedfacedeadbeefabaddad2" in
+
+    let (ct, tag) = encrypt ~variant:Aes_128 ~key ~iv ~aad pt in
+
+    let exp_ct =
+        Hex.to_bytes
+          "42831ec2217774244b7221b784d0d49ce3aa212f2c02a4e035c17e2329aca12e21d514b25466931c7d8f6a5aac84aa051ba30b396a0aac973d58e091"
+    in
+    let exp_tag = Hex.to_bytes "5bc94fbc3221a5db94fae95ae7121a47" in
+
+    exp_ct = ct && exp_tag = tag
 ;;
