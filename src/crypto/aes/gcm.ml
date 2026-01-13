@@ -151,7 +151,7 @@ let encrypt
       ~(iv : bytes)
       ~(aad : bytes)
       (pt : bytes)
-  : bytes * bytes
+  : ct:bytes * tag:bytes
   =
     let keys = key_expansion ~variant key in
     let h = encrypt_block_with_keys ~variant (Bytes.create 16) keys in
@@ -163,5 +163,5 @@ let encrypt
     let e_j0 = encrypt_block_with_keys ~variant j0 keys in
     let tag = xor_bytes e_j0 s in
 
-    (ct, tag)
+    (~ct, ~tag)
 ;;
