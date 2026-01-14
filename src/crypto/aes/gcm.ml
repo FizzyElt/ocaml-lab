@@ -165,7 +165,51 @@ let encrypt
 
     (ct, tag)
 ;;
-let x : float iarray = [| 0.; 1.; 2. |]
+
+(* constant‑time equal *)
+let ct_equal_tag16 (a : bytes) (b : bytes) : bool =
+    let la = Bytes.length a in
+    let lb = Bytes.length b in
+    let buf_a = Bytes.create 16 in
+    let buf_b = Bytes.create 16 in
+    let len_a = min la 16 in
+    let len_b = min lb 16 in
+
+    Bytes.blit a 0 buf_a 0 len_a;
+    Bytes.blit b 0 buf_b 0 len_b;
+
+    let diff = ref (la lxor 16 lor (lb lxor 16)) in
+
+    for i = 0 to 15 do
+      diff := !diff lor (Bytes.get_uint8 buf_a i lxor Bytes.get_uint8 buf_b i)
+    done;
+
+    !diff = 0
+;;
+
+let decrypt
+      ~(variant : variant)
+      ~(key : bytes)
+      ~(iv : bytes)
+      ~(aad : bytes)
+      ((ct, tag) : bytes * bytes)
+  =
+    let keys = key_expansion ~variant key in
+    let h = encrypt_block_with_keys ~variant (Bytes.create 16) keys in
+
+    let j0 = j0_of_iv ~h iv in
+
+    let s = ghash ~h ~aad ~ciphertext:ct in
+    let e_j0 = encrypt_block_with_keys ~variant j0 keys in
+    let tag' = xor_bytes e_j0 s in
+
+    if not (ct_equal_tag16 tag tag') then
+      invalid_arg "decrypt:fail verification tag";
+
+    let pt = encrypt_gctr ~variant ~keys ~init_counter:j0 ct in
+
+    pt
+;;
 
 (* 
 ================== 
@@ -222,4 +266,35 @@ let%test "gcm aes128 with aad and multi-block pt" =
     let exp_tag = Hex.to_bytes "5bc94fbc3221a5db94fae95ae7121a47" in
 
     exp_ct = ct && exp_tag = tag
+;;
+
+let%test "gcm aes128 decrypt ok" =
+    let key = Hex.to_bytes "feffe9928665731c6d6a8f9467308308" in
+    let iv = Hex.to_bytes "cafebabefacedbaddecaf888" in
+    let pt =
+        Hex.to_bytes
+          "d9313225f88406e5a55909c5aff5269a86a7a9531534f7da2e4c303d8a318a721c3c0c95956809532fcf0e2449a6b525b16aedf5aa0de657ba637b39"
+    in
+    let aad = Hex.to_bytes "feedfacedeadbeeffeedfacedeadbeefabaddad2" in
+    let (ct, tag) = encrypt ~variant:Aes_128 ~key ~iv ~aad pt in
+    let pt' = decrypt ~variant:Aes_128 ~key ~iv ~aad (ct, tag) in
+
+    pt = pt'
+;;
+
+let%test "gcm aes128 decrypt fail on bad tag" =
+    let key = Hex.to_bytes "00000000000000000000000000000000" in
+    let iv = Hex.to_bytes "000000000000000000000000" in
+    let pt = Hex.to_bytes "00000000000000000000000000000000" in
+    let aad = Hex.to_bytes "" in
+    let (ct, tag) = encrypt ~variant:Aes_128 ~key ~iv ~aad pt in
+    let bad_tag = Bytes.copy tag in
+    let first = Bytes.get_uint8 bad_tag 0 in
+    Bytes.set_uint8 bad_tag 0 (first lxor 0x01);
+
+    try
+      let _ = decrypt ~variant:Aes_128 ~key ~iv ~aad (ct, bad_tag) in
+      false
+    with
+    | Invalid_argument _ -> true
 ;;
