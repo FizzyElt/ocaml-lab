@@ -31,16 +31,16 @@ let rotr (x : word) (n : int) : word = x >> n ||| (x << 32 - n)
 let ch (x : word) (y : word) (z : word) : word = (x &&& y) ^^^ (~~~x &&& z)
 
 let maj (x : word) (y : word) (z : word) : word =
-    ((x &&& y) ^^^ (x &&& z)) ^^^ (y &&& z)
+    (x &&& y) ^^^ (x &&& z) ^^^ (y &&& z)
 ;;
 
-let big_sigma0 (x : word) : word = (rotr x 2 ^^^ rotr x 13) ^^^ rotr x 22
+let big_sigma0 (x : word) : word = rotr x 2 ^^^ rotr x 13 ^^^ rotr x 22
 
-let big_sigma1 (x : word) : word = (rotr x 6 ^^^ rotr x 11) ^^^ rotr x 25
+let big_sigma1 (x : word) : word = rotr x 6 ^^^ rotr x 11 ^^^ rotr x 25
 
-let small_sigma0 (x : word) : word = (rotr x 7 ^^^ rotr x 18) ^^^ (x >> 3)
+let small_sigma0 (x : word) : word = rotr x 7 ^^^ rotr x 18 ^^^ (x >> 3)
 
-let small_sigma1 (x : word) : word = (rotr x 17 ^^^ rotr x 19) ^^^ (x >> 10)
+let small_sigma1 (x : word) : word = rotr x 17 ^^^ rotr x 19 ^^^ (x >> 10)
 
 let k : word array =
     [| 0x428a2f98l;
@@ -145,8 +145,8 @@ let digest_bytes (data : bytes) : bytes =
         w.(i) <- get_be32 padded (base + (i * 4))
       done;
       for i = 16 to 63 do
-        let s0 = small_sigma1 w.(i - 2) in
-        let s1 = small_sigma0 w.(i - 15) in
+        let s0 = small_sigma0 w.(i - 15) in
+        let s1 = small_sigma1 w.(i - 2) in
         w.(i) <- Int32.(w.(i - 16) |> add s0 |> add w.(i - 7) |> add s1)
       done;
 
