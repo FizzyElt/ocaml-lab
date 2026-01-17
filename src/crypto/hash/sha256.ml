@@ -1,12 +1,18 @@
+open Codec
+
 type word = int32
 
-let ( &&& ) = Int32.logand
-let ( ||| ) = Int32.logor
-let ( ^^^ ) = Int32.logxor
-let ( ~~~ ) = Int32.lognot
+module Int32_Infix = struct
+  open Int32
+  let ( land ) = logand
+  let ( lor ) = logor
+  let ( lxor ) = logxor
+  let lnot = lognot
+  let ( lsl ) = shift_left
+  let ( lsr ) = shift_right_logical
+end
 
-let ( >> ) = Int32.shift_right_logical
-let ( << ) = Int32.shift_left
+open Int32_Infix
 
 let pad_message (data : bytes) : bytes =
     let len = Bytes.length data in
@@ -17,30 +23,26 @@ let pad_message (data : bytes) : bytes =
 
     Bytes.blit data 0 out 0 len;
     Bytes.set out len '\x80';
+    Bytes.set_int64_be out (total_len - 8) bit_len;
 
-    for i = 0 to 7 do
-      let shift = (7 - i) * 8 in
-      let byte = Int64.(to_int (logand (shift_right bit_len shift) 0xffL)) in
-      Bytes.set out (total_len - 8 + i) (Char.chr byte)
-    done;
     out
 ;;
 
-let rotr (x : word) (n : int) : word = x >> n ||| (x << 32 - n)
+let rotr (x : word) (n : int) : word = (x lsr n) lor (x lsl (32 - n))
 
-let ch (x : word) (y : word) (z : word) : word = (x &&& y) ^^^ (~~~x &&& z)
+let ch (x : word) (y : word) (z : word) : word = x land y lxor (lnot x land z)
 
 let maj (x : word) (y : word) (z : word) : word =
-    (x &&& y) ^^^ (x &&& z) ^^^ (y &&& z)
+    x land y lxor (x land z) lxor (y land z)
 ;;
 
-let big_sigma0 (x : word) : word = rotr x 2 ^^^ rotr x 13 ^^^ rotr x 22
+let big_sigma0 (x : word) : word = rotr x 2 lxor rotr x 13 lxor rotr x 22
 
-let big_sigma1 (x : word) : word = rotr x 6 ^^^ rotr x 11 ^^^ rotr x 25
+let big_sigma1 (x : word) : word = rotr x 6 lxor rotr x 11 lxor rotr x 25
 
-let small_sigma0 (x : word) : word = rotr x 7 ^^^ rotr x 18 ^^^ (x >> 3)
+let small_sigma0 (x : word) : word = rotr x 7 lxor rotr x 18 lxor (x lsr 3)
 
-let small_sigma1 (x : word) : word = rotr x 17 ^^^ rotr x 19 ^^^ (x >> 10)
+let small_sigma1 (x : word) : word = rotr x 17 lxor rotr x 19 lxor (x lsr 10)
 
 let k : word array =
     [| 0x428a2f98l;
@@ -110,21 +112,6 @@ let k : word array =
     |]
 ;;
 
-let get_be32 (b : bytes) (off : int) : word =
-    let b0 = Int32.of_int (Char.code (Bytes.get b off)) in
-    let b1 = Int32.of_int (Char.code (Bytes.get b (off + 1))) in
-    let b2 = Int32.of_int (Char.code (Bytes.get b (off + 2))) in
-    let b3 = Int32.of_int (Char.code (Bytes.get b (off + 3))) in
-    b0 << 24 ||| b1 << 16 ||| b2 << 8 ||| b3
-;;
-
-let put_be32 (b : bytes) (off : int) (x : word) : unit =
-    Bytes.set b off (x >> 24 &&& 0xffl |> Int32.to_int |> Char.chr);
-    Bytes.set b (off + 1) (x >> 16 &&& 0xffl |> Int32.to_int |> Char.chr);
-    Bytes.set b (off + 2) (x >> 8 &&& 0xffl |> Int32.to_int |> Char.chr);
-    Bytes.set b (off + 3) (x &&& 0xffl |> Int32.to_int |> Char.chr)
-;;
-
 let digest_bytes (data : bytes) : bytes =
     let h0 = ref 0x6a09e667l in
     let h1 = ref 0xbb67ae85l in
@@ -142,7 +129,7 @@ let digest_bytes (data : bytes) : bytes =
     for bi = 0 to blocks - 1 do
       let base = bi * 64 in
       for i = 0 to 15 do
-        w.(i) <- get_be32 padded (base + (i * 4))
+        w.(i) <- Bytes.get_int32_be padded (base + (i * 4))
       done;
       for i = 16 to 63 do
         let s0 = small_sigma0 w.(i - 15) in
@@ -162,9 +149,13 @@ let digest_bytes (data : bytes) : bytes =
       for i = 0 to 63 do
         let t1 =
             Int32.(
-              add (add (add (add !h (big_sigma1 !e)) (ch !e !f !g)) k.(i)) w.(i) )
+              !h
+              |> add (big_sigma1 !e)
+              |> add (ch !e !f !g)
+              |> add k.(i)
+              |> add w.(i) )
         in
-        let t2 = Int32.(add (big_sigma0 !a) (maj !a !b !c)) in
+        let t2 = Int32.(big_sigma0 !a |> add (maj !a !b !c)) in
         h := !g;
         g := !f;
         f := !e;
@@ -186,13 +177,37 @@ let digest_bytes (data : bytes) : bytes =
     done;
 
     let out = Bytes.create 32 in
-    put_be32 out 0 !h0;
-    put_be32 out 4 !h1;
-    put_be32 out 8 !h2;
-    put_be32 out 12 !h3;
-    put_be32 out 16 !h4;
-    put_be32 out 20 !h5;
-    put_be32 out 24 !h6;
-    put_be32 out 28 !h7;
+    Bytes.set_int32_be out 0 !h0;
+    Bytes.set_int32_be out 4 !h1;
+    Bytes.set_int32_be out 8 !h2;
+    Bytes.set_int32_be out 12 !h3;
+    Bytes.set_int32_be out 16 !h4;
+    Bytes.set_int32_be out 20 !h5;
+    Bytes.set_int32_be out 24 !h6;
+    Bytes.set_int32_be out 28 !h7;
     out
+;;
+
+let digest_string_hex (s : string) : string =
+    Hex.of_bytes (digest_bytes (Bytes.of_string s))
+;;
+
+let%test "sha256 empty" =
+    digest_string_hex ""
+    = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+;;
+
+let%test "sha256 abc" =
+    digest_string_hex "abc"
+    = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+;;
+
+let%test "sha256 long message" =
+    digest_string_hex "abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq"
+    = "248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1"
+;;
+
+let%test "sha256 quick brown fox" =
+    digest_string_hex "The quick brown fox jumps over the lazy dog"
+    = "d7a8fbb307d7809469ca9abcb0082e4f8d5651e46d3cdb762d02d0bf37c9e592"
 ;;
