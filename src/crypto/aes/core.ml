@@ -133,12 +133,10 @@ let mul14 (x : int) : int =
 let mix_column (a0 : int) (a1 : int) (a2 : int) (a3 : int)
   : int * int * int * int
   =
-    (*
-    2 3 1 1  a0
-    1 2 3 1  a1
-    1 1 2 3  a2
-    3 1 1 2  a3
-    *)
+    (* 2 3 1 1  a0 *)
+    (* 1 2 3 1  a1 *)
+    (* 1 1 2 3  a2 *)
+    (* 3 1 1 2  a3 *)
     let b0 = mul2 a0 lxor mul3 a1 lxor a2 lxor a3 in
     let b1 = a0 lxor mul2 a1 lxor mul3 a2 lxor a3 in
     let b2 = a0 lxor a1 lxor mul2 a2 lxor mul3 a3 in
@@ -149,12 +147,10 @@ let mix_column (a0 : int) (a1 : int) (a2 : int) (a3 : int)
 let inv_mix_column (a0 : int) (a1 : int) (a2 : int) (a3 : int)
   : int * int * int * int
   =
-    (*
-    E B D 9  a0
-    9 E B D  a1
-    D 9 E B  a2
-    B D 9 E  a3
-    *)
+    (* E B D 9  a0 *)
+    (* 9 E B D  a1 *)
+    (* D 9 E B  a2 *)
+    (* B D 9 E  a3 *)
     let b0 = mul14 a0 lxor mul11 a1 lxor mul13 a2 lxor mul9 a3 in
     let b1 = mul9 a0 lxor mul14 a1 lxor mul11 a2 lxor mul13 a3 in
     let b2 = mul13 a0 lxor mul9 a1 lxor mul14 a2 lxor mul11 a3 in
