@@ -1,6 +1,5 @@
 (library
- (name aes)
- (libraries codec util)
+ (name util)
  (inline_tests
   (flags (-verbose)))
  (preprocess

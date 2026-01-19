@@ -1,8 +1,8 @@
 open Encrypt
 open Decrypt
 open Variant
-open Core
 open Key_schedule
+open Util.Bytes_util
 
 let encrypt ~(variant : variant) ~(key : bytes) ~(iv : bytes) (pt : bytes) =
     let padded = pkcs7_pad pt in

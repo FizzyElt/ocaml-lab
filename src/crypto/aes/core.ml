@@ -1,16 +1,5 @@
 open Table
 
-let xor_bytes (a : bytes) (b : bytes) : bytes =
-    let len = Bytes.length a in
-    if Bytes.length b <> len then invalid_arg "xor_bytes: length mismatch";
-    let out = Bytes.create len in
-    for i = 0 to len - 1 do
-      let v = Bytes.get_uint8 a i lxor Bytes.get_uint8 b i in
-      Bytes.set_uint8 out i v
-    done;
-    out
-;;
-
 let sub_bytes (state : bytes) : bytes =
     let result = Bytes.copy state in
     for i = 0 to 15 do

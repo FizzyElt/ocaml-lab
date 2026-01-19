@@ -1,7 +1,7 @@
 open Encrypt
 open Variant
-open Core
 open Key_schedule
+open Util.Bytes_util
 
 (* ref: https://nvlpubs.nist.gov/nistpubs/Legacy/SP/nistspecialpublication800-38d.pdf *)
 
