@@ -21,11 +21,24 @@ let hmac_bytes (msg : bytes) ~(key : bytes) =
       (Bytes.cat o_key_pad (Sha256.digest_bytes (Bytes.cat i_key_pad msg)))
 ;;
 
+let hmac_verify_bytes (mac : bytes) ~(key : bytes) ~(msg : bytes) =
+    let computed = hmac_bytes msg ~key in
+    equal_bytes_ct computed mac
+;;
+
 (* HMAC-SHA256 over raw strings; returns lowercase hex string. *)
 let hmac (msg : string) ~(key : string) =
     let msg_bytes = Bytes.of_string msg in
     let key_bytes = Bytes.of_string key in
     hmac_bytes msg_bytes ~key:key_bytes |> Codec.Hex.of_bytes
+;;
+
+let hmac_verify (mac : string) ~(key : string) ~(msg : string) =
+    let computed = hmac msg ~key in
+    try
+      equal_bytes_ct (Codec.Hex.to_bytes mac) (Codec.Hex.to_bytes computed)
+    with
+    | _ -> false
 ;;
 
 let%test "hmac-sha256 rfc4231 tc1" =
