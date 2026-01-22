@@ -77,6 +77,30 @@ let encode (data : bytes) =
     Bytes.to_string out
 ;;
 
+let encode_url (data : bytes) =
+    let s = encode data in
+    let len = String.length s in
+    let rec trim i =
+        if i > 0 && s.[i - 1] = '=' then
+          trim (i - 1)
+        else
+          i
+    in
+    let out_len = trim len in
+    let out = Bytes.create out_len in
+    for i = 0 to out_len - 1 do
+      let c = s.[i] in
+      let c' =
+          match c with
+          | '+' -> '-'
+          | '/' -> '_'
+          | _ -> c
+      in
+      Bytes.set out i c'
+    done;
+    Bytes.to_string out
+;;
+
 let decode (s : string) =
     let len = String.length s in
     if len mod 4 <> 0 then invalid_arg "base64: invalid length";
@@ -145,14 +169,52 @@ let decode (s : string) =
     out
 ;;
 
+let decode_url (s : string) =
+    let len = String.length s in
+    let pad =
+        match len mod 4 with
+        | 0 -> 0
+        | 2 -> 2
+        | 3 -> 1
+        | _ -> invalid_arg "base64url: invalid length"
+    in
+    let padded = Bytes.create (len + pad) in
+    for i = 0 to len - 1 do
+      let c = s.[i] in
+      let c' =
+          match c with
+          | '-' -> '+'
+          | '_' -> '/'
+          | _ -> c
+      in
+      Bytes.set padded i c'
+    done;
+    for i = len to len + pad - 1 do
+      Bytes.set padded i '='
+    done;
+    decode (Bytes.to_string padded)
+;;
+
 let%test _ = encode (Bytes.of_string "") = ""
 let%test _ = encode (Bytes.of_string "f") = "Zg=="
 let%test _ = encode (Bytes.of_string "fo") = "Zm8="
 let%test _ = encode (Bytes.of_string "foo") = "Zm9v"
 let%test _ = encode (Bytes.of_string "foobar") = "Zm9vYmFy"
 
+let%test _ = encode_url (Bytes.of_string "") = ""
+let%test _ = encode_url (Bytes.of_string "f") = "Zg"
+let%test _ = encode_url (Bytes.of_string "fo") = "Zm8"
+let%test _ = encode_url (Bytes.of_string "foo") = "Zm9v"
+let%test _ = encode_url (Bytes.of_string "foobar") = "Zm9vYmFy"
+
 let%test _ = Bytes.equal (decode "") (Bytes.of_string "")
 let%test _ = Bytes.equal (decode "Zg==") (Bytes.of_string "f")
 let%test _ = Bytes.equal (decode "Zm8=") (Bytes.of_string "fo")
 let%test _ = Bytes.equal (decode "Zm9v") (Bytes.of_string "foo")
 let%test _ = Bytes.equal (decode "Zm9vYmFy") (Bytes.of_string "foobar")
+
+let%test _ = Bytes.equal (decode_url "") (Bytes.of_string "")
+let%test _ = Bytes.equal (decode_url "Zg") (Bytes.of_string "f")
+let%test _ = Bytes.equal (decode_url "Zm8") (Bytes.of_string "fo")
+let%test _ = Bytes.equal (decode_url "Zm9v") (Bytes.of_string "foo")
+let%test _ = Bytes.equal (decode_url "Zm9vYmFy") (Bytes.of_string "foobar")
