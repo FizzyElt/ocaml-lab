@@ -1,5 +1,7 @@
 open Codec
 
+(* ref: https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.180-4.pdf *)
+
 type word = int32
 
 module Int32_Infix = struct
