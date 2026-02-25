@@ -9,7 +9,7 @@ let extract ~(salt : bytes) ~(ikm : bytes) =
         else
           salt
     in
-    hmac_bytes ikm ~key:salt
+    hmac_bytes ikm ~key:salt ~algo:`Sha_256
 ;;
 
 let expand (prk : bytes) ~(info : bytes) ~(len : int) =
@@ -28,7 +28,7 @@ let expand (prk : bytes) ~(info : bytes) ~(len : int) =
     for i = 1 to blocks do
       let ctr = Bytes.make 1 (Char.chr i) in
       let data = Bytes.concat Bytes.empty [ !ti; info; ctr ] in
-      ti := hmac_bytes data ~key:prk;
+      ti := hmac_bytes data ~key:prk ~algo:`Sha_256;
 
       let take = min hash_len (len - !out_pos) in
 
