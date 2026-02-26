@@ -103,7 +103,7 @@ let hmac_verify_bytes
     equal_bytes_ct computed mac
 ;;
 
-(* HMAC-SHA256 over raw strings; returns lowercase hex string. *)
+(* returns lowercase hex string. *)
 let hmac (msg : string) ~(key : string) ~(algo : [ `Sha_256 | `Sha_1 ]) : string
   =
     let msg_bytes = Bytes.of_string msg in
