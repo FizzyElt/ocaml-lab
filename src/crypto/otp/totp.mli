@@ -1,7 +1,7 @@
 type algo =
-  | SHA1
-  | SHA256
-  | SHA512
+  | SHA_1
+  | SHA_256
+  | SHA_512
 
 type config =
   { secret : bytes;
