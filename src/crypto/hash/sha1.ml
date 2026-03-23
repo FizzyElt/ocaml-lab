@@ -34,11 +34,11 @@ let rotl (x : word) (n : int) : word = (x lsl n) lor (x lsr (32 - n))
 
 let f (t : int) (b : word) (c : word) (d : word) : word =
     if t < 20 then
-      (b land c) lor (lnot b land d)
+      b land c lor (lnot b land d)
     else if t < 40 then
       b lxor c lxor d
     else if t < 60 then
-      (b land c) lor (b land d) lor (c land d)
+      b land c lor (b land d) lor (c land d)
     else
       b lxor c lxor d
 ;;
@@ -71,7 +71,10 @@ let digest_bytes (data : bytes) : bytes =
         w.(i) <- Bytes.get_int32_be padded (base + (i * 4))
       done;
       for i = 16 to 79 do
-        w.(i) <- rotl Int32.(w.(i - 3) lxor w.(i - 8) lxor w.(i - 14) lxor w.(i - 16)) 1
+        w.(i)
+        <- rotl
+             Int32.(w.(i - 3) lxor w.(i - 8) lxor w.(i - 14) lxor w.(i - 16))
+             1
       done;
 
       let a = ref !h0 in

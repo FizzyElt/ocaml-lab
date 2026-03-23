@@ -14,7 +14,7 @@
  (allow_empty)
  (synopsis "A short synopsis")
  (description "A longer description")
- (depends ocaml ppx_inline_test)
+ (depends ocaml ppx_inline_test zarith)
  (tags
   ("add topics" "to describe" your project)))
 

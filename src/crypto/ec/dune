@@ -1,0 +1,7 @@
+(library
+ (name ec)
+ (libraries hash codec util zarith)
+ (inline_tests
+  (flags (-verbose)))
+ (preprocess
+  (pps ppx_inline_test)))

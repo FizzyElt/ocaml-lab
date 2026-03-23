@@ -209,24 +209,20 @@ let digest_string_hex (s : string) : string =
 
 let%test "sha384 empty" =
     digest_string_hex ""
-    = "38b060a751ac96384cd9327eb1b1e36a21fdb71114be07434c0cc7bf63f6e1da\
-       274edebfe76f65fbd51ad2f14898b95b"
+    = "38b060a751ac96384cd9327eb1b1e36a21fdb71114be07434c0cc7bf63f6e1da274edebfe76f65fbd51ad2f14898b95b"
 ;;
 
 let%test "sha384 abc" =
     digest_string_hex "abc"
-    = "cb00753f45a35e8bb5a03d699ac65007272c32ab0eded1631a8b605a43ff5bed\
-       8086072ba1e7cc2358baeca134c825a7"
+    = "cb00753f45a35e8bb5a03d699ac65007272c32ab0eded1631a8b605a43ff5bed8086072ba1e7cc2358baeca134c825a7"
 ;;
 
 let%test "sha384 long message" =
     digest_string_hex "abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq"
-    = "3391fdddfc8dc7393707a65b1b4709397cf8b1d162af05abfe8f450de5f36bc6\
-       b0455a8520bc4e6f5fe95b1fe3c8452b"
+    = "3391fdddfc8dc7393707a65b1b4709397cf8b1d162af05abfe8f450de5f36bc6b0455a8520bc4e6f5fe95b1fe3c8452b"
 ;;
 
 let%test "sha384 quick brown fox" =
     digest_string_hex "The quick brown fox jumps over the lazy dog"
-    = "ca737f1014a48f4c0b6dd43cb177b0afd9e5169367544c494011e3317dbf9a50\
-       9cb1e5dc1e85a941bbee3d7f2afbc9b1"
+    = "ca737f1014a48f4c0b6dd43cb177b0afd9e5169367544c494011e3317dbf9a509cb1e5dc1e85a941bbee3d7f2afbc9b1"
 ;;
