@@ -46,6 +46,23 @@ let n =
       "0xFFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551"
 ;;
 
+let mod_p (x : Z.t) : Z.t =
+    let r = Z.erem x p in
+    if Z.sign r < 0 then
+      Z.add r p
+    else
+      r
+;;
+
+let fe_add a b = mod_p Z.(a + b)
+let fe_sub a b = mod_p Z.(a - b)
+let fe_mul a b = mod_p Z.(a * b)
+let fe_square a = mod_p Z.(a * a)
+
+let ( %+ ) = fe_add
+let ( %- ) = fe_sub
+let ( %* ) = fe_mul
+
 let z_of_bytes_be (b : bytes) : Z.t =
     if Bytes.length b = 0 then
       Z.zero
@@ -55,18 +72,19 @@ let z_of_bytes_be (b : bytes) : Z.t =
 let bytes_of_z_be_padded (x : Z.t) ~(len : int) : bytes =
     if Z.sign x < 0 then invalid_arg "bytes_of_z_be_padded: negative integer";
 
-    let raw = Z.to_bits x in
-    let raw_len = String.length raw in
-    let out = Bytes.make len '\x00' in
+    let hex = Z.format "%x" x in
+    let hex =
+        if String.length hex mod 2 = 1 then
+          "0" ^ hex
+        else
+          hex
+    in
 
-    if raw_len > len then invalid_arg "bytes_of_z_be_padded: integer too large";
+    let byte_len = String.length hex / 2 in
+    if byte_len > len then invalid_arg "bytes_of_z_be_padded: integer too large";
 
-    for i = 0 to raw_len - 1 do
-      let byte = Char.code raw.[raw_len - 1 - i] in
-      Bytes.set_uint8 out (len - 1 - i) byte
-    done;
-
-    out
+    let padded_hex = String.make ((len - byte_len) * 2) '0' ^ hex in
+    Hex.to_bytes padded_hex
 ;;
 
 let scalar_of_bytes (b : bytes) : Z.t =
@@ -101,28 +119,15 @@ let point_of_affine (pt : affine) : point =
         }
 ;;
 
-let mod_p (x : Z.t) : Z.t =
-    let r = Z.erem x p in
-    if Z.sign r < 0 then
-      Z.add r p
-    else
-      r
-;;
-
-let fe_add a b = mod_p Z.(a + b)
-let fe_sub a b = mod_p Z.(a - b)
-let fe_mul a b = mod_p Z.(a * b)
-let fe_square a = mod_p Z.(a * a)
-
 let is_on_curve (pt : point) : bool =
     match affine_of_point pt with
     | Infinity_affine -> false
     | Affine { x; y } ->
       let lhs = fe_square y in
       let x2 = fe_square x in
-      let x3 = fe_mul x2 x in
-      let ax = fe_mul a x in
-      let rhs = fe_add (fe_add x3 ax) b in
+      let x3 = x2 %* x in
+      let ax = a %* x in
+      let rhs = x3 %+ ax %+ b in
       Z.equal lhs rhs
 ;;
 
@@ -165,4 +170,163 @@ let is_valid_public_key (pt : point) : bool =
       && Z.compare y Z.zero >= 0
       && Z.compare y p < 0
       && is_on_curve pt
+;;
+
+let fe_inv (x : Z.t) : Z.t = Z.invert x p
+
+let point_double (pt : affine) : affine =
+    match pt with
+    | Infinity_affine -> Infinity_affine
+    | Affine { x; y } ->
+      if Z.equal y Z.zero then
+        Infinity_affine
+      else begin
+        let three_x2 = Z.of_int 3 %* fe_square x in
+        let numerator = three_x2 %+ a in
+        let denominator = Z.of_int 2 %* y in
+        (* lambda = (3*x^2 + a) / (2*y) mod p *)
+        let lambda = numerator %* fe_inv denominator in
+        (* x3 = lambda^2 - 2*x mod p *)
+        let x3 = fe_square lambda %- (Z.of_int 2 %* x) in
+        (* y3 = lambda*(x - x3) - y mod p *)
+        let y3 = lambda %* (x %- x3) %- y in
+        Affine { x = x3; y = y3 }
+      end
+;;
+
+let point_add (p1 : affine) (p2 : affine) : affine =
+    match (p1, p2) with
+    | (Infinity_affine, q) -> q
+    | (p, Infinity_affine) -> p
+    | (Affine { x = x1; y = y1 }, Affine { x = x2; y = y2 }) ->
+      if Z.equal x1 x2 then
+        if Z.equal y1 y2 then
+          point_double p1
+        else
+          Infinity_affine
+      else begin
+        let numerator = y2 %- y1 in
+        let denominator = x2 %- x1 in
+        (* lambda = (y2 - y1) / (x2 - x1) mod p *)
+        let lambda = numerator %* fe_inv denominator in
+        (* x3 = lambda^2 - x1 - x2 mod p *)
+        let x3 = fe_square lambda %- x1 %- x2 in
+        (* y3 = lambda*(x1 - x3) - y1 mod p *)
+        let y3 = lambda %* (x1 %- x3) %- y1 in
+        Affine { x = x3; y = y3 }
+      end
+;;
+
+let g_affine = Affine { x = gx; y = gy }
+let g_point = point_of_affine g_affine
+
+let scalar_mult (k : Z.t) (p : point) : point =
+    if Z.sign k < 0 then invalid_arg "scalar_mult: negative scalar";
+
+    match affine_of_point p with
+    | Infinity_affine -> Infinity
+    | base ->
+      let rec loop acc cur i =
+          if i >= Z.numbits k then
+            acc
+          else (
+            let acc =
+                if Z.testbit k i then
+                  point_add acc cur
+                else
+                  acc
+            in
+            let cur = point_double cur in
+            loop acc cur (i + 1)
+          )
+      in
+      point_of_affine (loop Infinity_affine base 0)
+;;
+
+let scalar_mult_base (k : Z.t) : point = scalar_mult k g_point
+
+(* test *)
+
+let%test "fe_inv" =
+    let x = Z.of_int 7 in
+    let inv = fe_inv x in
+    Z.equal (x %* inv) Z.one
+;;
+
+let%test "fe_inv gx" =
+    let inv = fe_inv gx in
+    Z.equal (gx %* inv) Z.one
+;;
+
+let%test "generator is on curve" = is_on_curve g_point
+
+let%test "point_double keeps point on curve" =
+    match point_of_affine (point_double g_affine) with
+    | Infinity -> false
+    | pt -> is_on_curve pt
+;;
+
+let%test "point_add p p equals point_double p" =
+    let lhs = point_add g_affine g_affine in
+    let rhs = point_double g_affine in
+    match (point_of_affine lhs, point_of_affine rhs) with
+    | (Point { x = x1; y = y1 }, Point { x = x2; y = y2 }) ->
+      Bytes.equal x1 x2 && Bytes.equal y1 y2
+    | _ -> false
+;;
+
+let%test "point_add infinity left identity" =
+    match (point_of_affine (point_add Infinity_affine g_affine), g_point) with
+    | (Point { x = x1; y = y1 }, Point { x = x2; y = y2 }) ->
+      Bytes.equal x1 x2 && Bytes.equal y1 y2
+    | _ -> false
+;;
+
+let%test "point_add infinity right identity" =
+    match (point_of_affine (point_add g_affine Infinity_affine), g_point) with
+    | (Point { x = x1; y = y1 }, Point { x = x2; y = y2 }) ->
+      Bytes.equal x1 x2 && Bytes.equal y1 y2
+    | _ -> false
+;;
+
+let%test "point_add inverse gives infinity" =
+    let neg_g = Affine { x = gx; y = mod_p Z.(-gy) } in
+    match point_add g_affine neg_g with
+    | Infinity_affine -> true
+    | Affine _ -> false
+;;
+
+let%test "scalar_mult 0 = infinity" =
+    match scalar_mult Z.zero g_point with
+    | Infinity -> true
+    | Point _ -> false
+;;
+
+let%test "scalar_mult 1 g = g" =
+    match (scalar_mult Z.one g_point, g_point) with
+    | (Point { x = x1; y = y1 }, Point { x = x2; y = y2 }) ->
+      Bytes.equal x1 x2 && Bytes.equal y1 y2
+    | _ -> false
+;;
+
+let%test "scalar_mult 2 g = point_double g" =
+    match
+      (scalar_mult (Z.of_int 2) g_point, point_of_affine (point_double g_affine))
+    with
+    | (Point { x = x1; y = y1 }, Point { x = x2; y = y2 }) ->
+      Bytes.equal x1 x2 && Bytes.equal y1 y2
+    | _ -> false
+;;
+
+let%test "scalar_mult_base 1 = g" =
+    match (scalar_mult_base Z.one, g_point) with
+    | (Point { x = x1; y = y1 }, Point { x = x2; y = y2 }) ->
+      Bytes.equal x1 x2 && Bytes.equal y1 y2
+    | _ -> false
+;;
+
+let%test "scalar_mult_base n = infinity" =
+    match scalar_mult_base n with
+    | Infinity -> true
+    | Point _ -> false
 ;;
