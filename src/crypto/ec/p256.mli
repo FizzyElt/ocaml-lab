@@ -1,10 +1,10 @@
-type scalar
+type scalar = Z.t
 
 type point =
   | Infinity
   | Point of
-      { x : bytes
-      ; y : bytes
+      { x : bytes;
+        y : bytes
       }
 
 val coordinate_size_bytes : int
