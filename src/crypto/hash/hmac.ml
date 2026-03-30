@@ -238,3 +238,29 @@ let%test "hmac-sha512 rfc4231 tc4" =
     Codec.Hex.of_bytes mac
     = "b0ba465637458c6990e5a8c5f61d4af7e576d97ff94b872de76f8050361ee3dba91ca5c11aa25eb4d679275cc5788063a5f19741120c4f2de2adebeb10a298dd"
 ;;
+
+let%test "hmac-sha1 rfc2202 tc1" =
+    let key = Codec.Hex.to_bytes "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b" in
+    let msg = Bytes.of_string "Hi There" in
+    let mac = hmac_bytes msg ~key ~algo:`Sha_1 in
+    Codec.Hex.of_bytes mac = "b617318655057264e28bc0b6fb378c8ef146be00"
+;;
+
+let%test "hmac-sha1 rfc2202 tc2" =
+    let key = Bytes.of_string "Jefe" in
+    let msg = Bytes.of_string "what do ya want for nothing?" in
+    let mac = hmac_bytes msg ~key ~algo:`Sha_1 in
+    Codec.Hex.of_bytes mac = "effcdf6ae5eb2fa2d27416d5f184df9c259a7c79"
+;;
+
+let%test "hmac-sha1 rfc2202 tc3" =
+    let key = Codec.Hex.to_bytes "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" in
+    let msg =
+        Array.make 50 "dd"
+        |> Array.to_list
+        |> String.concat ""
+        |> Codec.Hex.to_bytes
+    in
+    let mac = hmac_bytes msg ~key ~algo:`Sha_1 in
+    Codec.Hex.of_bytes mac = "125d7342b9ac11cd91a39af48aa17b4f63f175d3"
+;;
