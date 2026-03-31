@@ -15,6 +15,8 @@ type key_pair =
     private_key : private_key
   }
 
+(* ref https://growingswe.com/blog/elliptic-curve-cryptography *)
+
 (* Development-only PRNG. Replace with a cryptographically secure source (CSPRNG). *)
 let random_bytes (len : int) : bytes =
     let out = Bytes.create len in
