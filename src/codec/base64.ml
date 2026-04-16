@@ -12,7 +12,7 @@ let inv_alphabet_table =
     end
 ;;
 
-let encode (data : bytes) =
+let encode (data : bytes) : string =
     let len = Bytes.length data in
     let out_len = (len + 2) / 3 * 4 in
 
@@ -77,7 +77,7 @@ let encode (data : bytes) =
     Bytes.to_string out
 ;;
 
-let encode_url (data : bytes) =
+let encode_url (data : bytes) : string =
     let s = encode data in
     let len = String.length s in
     let rec trim i =
@@ -101,7 +101,7 @@ let encode_url (data : bytes) =
     Bytes.to_string out
 ;;
 
-let decode (s : string) =
+let decode (s : string) : bytes =
     let len = String.length s in
     if len mod 4 <> 0 then invalid_arg "base64: invalid length";
 
@@ -169,7 +169,7 @@ let decode (s : string) =
     out
 ;;
 
-let decode_url (s : string) =
+let decode_url (s : string) : bytes =
     let len = String.length s in
     let pad =
         match len mod 4 with
