@@ -8,104 +8,29 @@ type algo =
 
 (* ref: https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-224.ipd.pdf page 5 *)
 (* algorithm: https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.198-1.pdf *)
-module HmacSha512 = struct
-  let hmac_bytes (msg : bytes) ~(key : bytes) : bytes =
-      (* sha 512 hmac block size 1024 bits = 128 bytes *)
-      let block_size = 128 in
-      let key_len = Bytes.length key in
-      let key' =
-          if key_len > block_size then
-            Bytes.cat (Sha512.digest_bytes key) (Bytes.create (block_size - 64))
-          else
-            Bytes.cat key (Bytes.create (block_size - key_len))
-      in
-
-      let o_key_pad = xor_bytes (Bytes.make block_size '\x5c') key' in
-      let i_key_pad = xor_bytes (Bytes.make block_size '\x36') key' in
-
-      Sha512.digest_bytes
-        (Bytes.cat o_key_pad (Sha512.digest_bytes (Bytes.cat i_key_pad msg)))
-  ;;
-
-  let hmac (msg : string) ~(key : string) : string =
-      let msg_bytes = Bytes.of_string msg in
-      let key_bytes = Bytes.of_string key in
-      hmac_bytes msg_bytes ~key:key_bytes |> Codec.Hex.of_bytes
-  ;;
-
-  let hmac_verify_bytes (mac : bytes) ~(key : bytes) ~(msg : bytes) : bool =
-      let computed = hmac_bytes msg ~key in
-      equal_bytes_ct computed mac
-  ;;
-
-  let hmac_verify (mac : string) ~(key : string) ~(msg : string) : bool =
-      let computed = hmac msg ~key in
-      try
-        equal_bytes_ct (Codec.Hex.to_bytes mac) (Codec.Hex.to_bytes computed)
-      with
-      | _ -> false
-  ;;
+module type DIGEST = sig
+  val block_size : int
+  val digest_size : int
+  val digest_bytes : bytes -> bytes
 end
 
-module HmacSha256 = struct
+module Make (D : DIGEST) = struct
   let hmac_bytes (msg : bytes) ~(key : bytes) : bytes =
-      (* sha 256 hmac block size 512 bits = 64 bytes *)
-      let block_size = 64 in
       let key_len = Bytes.length key in
       let key' =
-          if key_len > block_size then
-            Bytes.cat (Sha256.digest_bytes key) (Bytes.create (block_size - 32))
-          else
-            Bytes.cat key (Bytes.create (block_size - key_len))
-      in
-
-      let o_key_pad = xor_bytes (Bytes.make block_size '\x5c') key' in
-      let i_key_pad = xor_bytes (Bytes.make block_size '\x36') key' in
-
-      Sha256.digest_bytes
-        (Bytes.cat o_key_pad (Sha256.digest_bytes (Bytes.cat i_key_pad msg)))
-  ;;
-
-  let hmac (msg : string) ~(key : string) : string =
-      let msg_bytes = Bytes.of_string msg in
-      let key_bytes = Bytes.of_string key in
-      hmac_bytes msg_bytes ~key:key_bytes |> Codec.Hex.of_bytes
-  ;;
-
-  let hmac_verify_bytes (mac : bytes) ~(key : bytes) ~(msg : bytes) : bool =
-      let computed = hmac_bytes msg ~key in
-      equal_bytes_ct computed mac
-  ;;
-
-  let hmac_verify (mac : string) ~(key : string) ~(msg : string) : bool =
-      let computed = hmac msg ~key in
-      try
-        equal_bytes_ct (Codec.Hex.to_bytes mac) (Codec.Hex.to_bytes computed)
-      with
-      | _ -> false
-  ;;
-end
-
-module HmacSha1 = struct
-  let hmac_bytes (msg : bytes) ~(key : bytes) : bytes =
-      (* sha1 hmac block size 512 bits = 64 bytes *)
-      let block_size = 64 in
-      let digest_size = 20 in
-      let key_len = Bytes.length key in
-      let key' =
-          if key_len > block_size then
+          if key_len > D.block_size then
             Bytes.cat
-              (Sha1.digest_bytes key)
-              (Bytes.create (block_size - digest_size))
+              (D.digest_bytes key)
+              (Bytes.create (D.block_size - D.digest_size))
           else
-            Bytes.cat key (Bytes.create (block_size - key_len))
+            Bytes.cat key (Bytes.create (D.block_size - key_len))
       in
 
-      let o_key_pad = xor_bytes (Bytes.make block_size '\x5c') key' in
-      let i_key_pad = xor_bytes (Bytes.make block_size '\x36') key' in
+      let o_key_pad = xor_bytes (Bytes.make D.block_size '\x5c') key' in
+      let i_key_pad = xor_bytes (Bytes.make D.block_size '\x36') key' in
 
-      Sha1.digest_bytes
-        (Bytes.cat o_key_pad (Sha1.digest_bytes (Bytes.cat i_key_pad msg)))
+      D.digest_bytes
+        (Bytes.cat o_key_pad (D.digest_bytes (Bytes.cat i_key_pad msg)))
   ;;
 
   let hmac (msg : string) ~(key : string) : string =
@@ -127,6 +52,48 @@ module HmacSha1 = struct
       | _ -> false
   ;;
 end
+
+module DigestSha1 : DIGEST = struct
+  let block_size = 64
+  let digest_size = 20
+  let digest_bytes = Sha1.digest_bytes
+end
+
+module DigestSha256 : DIGEST = struct
+  let block_size = 64
+  let digest_size = 32
+  let digest_bytes = Sha256.digest_bytes
+end
+
+module DigestSha512 : DIGEST = struct
+  let block_size = 128
+  let digest_size = 64
+  let digest_bytes = Sha512.digest_bytes
+end
+
+module HmacSha1 = Make (struct
+    let block_size = 64
+    let digest_size = 20
+    let digest_bytes = Sha1.digest_bytes
+  end)
+
+module HmacSha256 = Make (struct
+    let block_size = 64
+    let digest_size = 32
+    let digest_bytes = Sha256.digest_bytes
+  end)
+
+module HmacSha512 = Make (struct
+    let block_size = 128
+    let digest_size = 64
+    let digest_bytes = Sha512.digest_bytes
+  end)
+
+let digest_size_of_algo = function
+  | `Sha_1 -> DigestSha1.digest_size
+  | `Sha_256 -> DigestSha256.digest_size
+  | `Sha_512 -> DigestSha512.digest_size
+;;
 
 let hmac_bytes (msg : bytes) ~(key : bytes) ~(algo : algo) : bytes =
     match algo with
@@ -138,8 +105,13 @@ let hmac_bytes (msg : bytes) ~(key : bytes) ~(algo : algo) : bytes =
 let hmac_verify_bytes (mac : bytes) ~(key : bytes) ~(msg : bytes) ~(algo : algo)
   : bool
   =
-    let computed = hmac_bytes msg ~key ~algo in
-    equal_bytes_ct computed mac
+    let expected_len = digest_size_of_algo algo in
+    if Bytes.length mac <> expected_len then
+      false
+    else (
+      let computed = hmac_bytes msg ~key ~algo in
+      equal_bytes_ct computed mac
+    )
 ;;
 
 (* returns lowercase hex string. *)
@@ -152,9 +124,13 @@ let hmac (msg : string) ~(key : string) ~(algo : algo) : string =
 let hmac_verify (mac : string) ~(key : string) ~(msg : string) ~(algo : algo)
   : bool
   =
-    let computed = hmac msg ~key ~algo in
     try
-      equal_bytes_ct (Codec.Hex.to_bytes mac) (Codec.Hex.to_bytes computed)
+      let mac_bytes = Codec.Hex.to_bytes mac in
+      hmac_verify_bytes
+        mac_bytes
+        ~key:(Bytes.of_string key)
+        ~msg:(Bytes.of_string msg)
+        ~algo
     with
     | _ -> false
 ;;
