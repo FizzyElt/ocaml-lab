@@ -1,20 +1,11 @@
-open Hash
-
-type algo =
-  | SHA_1
-  | SHA_256
-  | SHA_512
-
 type config =
-  { secret : bytes;
-    digits : int;
+  { hotp : Hotp.config;
     period : int;
-    t0 : int64;
-    algo : algo
+    t0 : int64
   }
 
 let default_config (secret : bytes) : config =
-    { secret; digits = 6; period = 30; t0 = 0L; algo = SHA_1 }
+    { hotp = Hotp.default_config secret; period = 30; t0 = 0L }
 ;;
 
 let counter_of_timestamp (cfg : config) ~(timestamp_s : int64) : int64 =
@@ -28,86 +19,13 @@ let counter_of_timestamp (cfg : config) ~(timestamp_s : int64) : int64 =
     Int64.div delta (Int64.of_int cfg.period)
 ;;
 
-let pow10 n =
-    let rec loop acc i =
-        if i = 0 then
-          acc
-        else
-          loop (acc * 10) (i - 1)
-    in
-    loop 1 n
-;;
-
-let hmac_by_algo (cfg : config) (msg : bytes) =
-    let algo =
-        match cfg.algo with
-        | SHA_1 -> `Sha_1
-        | SHA_256 -> `Sha_256
-        | SHA_512 -> `Sha_512
-    in
-
-    Hmac.hmac_bytes msg ~key:cfg.secret ~algo
-;;
-let hotp_int (cfg : config) ~(counter : int64) : int =
-    if cfg.digits <= 0 then invalid_arg "totp: digits must be > 0";
-
-    let counter_bytes = Bytes.create 8 in
-    Bytes.set_int64_be counter_bytes 0 counter;
-
-    let mac = hmac_by_algo cfg counter_bytes in
-    let mac_len = Bytes.length mac in
-
-    if mac_len < 20 then invalid_arg "totp: invalid HMAC length";
-
-    let offset = Char.code (Bytes.get mac (mac_len - 1)) land 0x0f in
-    if offset + 3 >= mac_len then invalid_arg "totp: invalid dynamic offset";
-
-    let b0 = Char.code (Bytes.get mac offset) land 0x7f in
-    let b1 = Char.code (Bytes.get mac (offset + 1)) in
-    let b2 = Char.code (Bytes.get mac (offset + 2)) in
-    let b3 = Char.code (Bytes.get mac (offset + 3)) in
-
-    let code31 = (b0 lsl 24) lor (b1 lsl 16) lor (b2 lsl 8) lor b3 in
-
-    code31 mod pow10 cfg.digits
-;;
-
-let hotp_code (cfg : config) ~(counter : int64) : string =
-    Printf.sprintf "%0*d" cfg.digits (hotp_int cfg ~counter)
-;;
-
 let totp_at (cfg : config) ~(timestamp_s : int64) : string =
     let counter = counter_of_timestamp cfg ~timestamp_s in
-    hotp_code cfg ~counter
+    Hotp.hotp_code cfg.hotp ~counter
 ;;
 
 let totp_now (cfg : config) ~(timestamp_s : int64) : string =
     totp_at cfg ~timestamp_s
-;;
-
-let equal_code_ct (a : string) (b : string) : bool =
-    let len_a = String.length a in
-    let len_b = String.length b in
-    let max_len = Int.max len_a len_b in
-    let diff = ref (len_a lxor len_b) in
-
-    for i = 0 to max_len - 1 do
-      let ca =
-          if i < len_a then
-            Char.code a.[i]
-          else
-            0
-      in
-      let cb =
-          if i < len_b then
-            Char.code b.[i]
-          else
-            0
-      in
-      diff := !diff lor (ca lxor cb)
-    done;
-
-    !diff = 0
 ;;
 
 let verify_at
@@ -127,7 +45,7 @@ let verify_at
           let candidate_counter = Int64.add base_counter (Int64.of_int delta) in
           if
             Int64.compare candidate_counter 0L >= 0
-            && equal_code_ct code (hotp_code cfg ~counter:candidate_counter)
+            && Hotp.verify_hotp cfg.hotp ~counter:candidate_counter ~code
           then
             true
           else
@@ -148,41 +66,15 @@ let verify_now
     verify_at ~window cfg ~timestamp_s ~code
 ;;
 
-let%test "hotp_int rfc4226 counters 0..9" =
-    let cfg =
-        { secret = Bytes.of_string "12345678901234567890";
-          digits = 6;
-          period = 30;
-          t0 = 0L;
-          algo = SHA_1
-        }
-    in
-    let expected =
-        [ 755224;
-          287082;
-          359152;
-          969429;
-          338314;
-          254676;
-          287922;
-          162583;
-          399871;
-          520489
-        ]
-    in
-    List.for_all2
-      (fun counter code -> hotp_int cfg ~counter:(Int64.of_int counter) = code)
-      [ 0; 1; 2; 3; 4; 5; 6; 7; 8; 9 ]
-      expected
-;;
-
 let%test "totp_at rfc6238 sha1 vectors" =
     let cfg =
-        { secret = Bytes.of_string "12345678901234567890";
-          digits = 8;
+        { hotp =
+            { Hotp.secret = Bytes.of_string "12345678901234567890";
+              digits = 8;
+              algo = Hotp.SHA_1
+            };
           period = 30;
-          t0 = 0L;
-          algo = SHA_1
+          t0 = 0L
         }
     in
     List.for_all
@@ -198,11 +90,13 @@ let%test "totp_at rfc6238 sha1 vectors" =
 
 let%test "totp_at rfc6238 sha256 vectors" =
     let cfg =
-        { secret = Bytes.of_string "12345678901234567890123456789012";
-          digits = 8;
+        { hotp =
+            { Hotp.secret = Bytes.of_string "12345678901234567890123456789012";
+              digits = 8;
+              algo = Hotp.SHA_256
+            };
           period = 30;
-          t0 = 0L;
-          algo = SHA_256
+          t0 = 0L
         }
     in
     List.for_all
@@ -218,11 +112,13 @@ let%test "totp_at rfc6238 sha256 vectors" =
 
 let%test "verify_at exact match and window behavior" =
     let cfg =
-        { secret = Bytes.of_string "12345678901234567890";
-          digits = 8;
+        { hotp =
+            { Hotp.secret = Bytes.of_string "12345678901234567890";
+              digits = 8;
+              algo = Hotp.SHA_1
+            };
           period = 30;
-          t0 = 0L;
-          algo = SHA_1
+          t0 = 0L
         }
     in
     let code_at_59 = "94287082" in
